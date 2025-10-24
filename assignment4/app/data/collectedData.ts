@@ -1,17 +1,5 @@
-// app/data/collectedData.ts
-
-/**
- * REPLACE THIS ARRAY WITH YOUR COLLECTED DATA
- * 
- * Instructions:
- * 1. Collect your continuous data (measurements, observations, etc.)
- * 2. Replace the dummy values below with your actual data points
- * 3. Make sure all values are numbers
- * 4. You can have as many data points as needed
- */
 
 export const collectedData: number[] = [
-  // REPLACE THESE DUMMY VALUES WITH YOUR ACTUAL COLLECTED DATA
   1275416, 1375204, 1280430, 1293079, 1317496, 1240172, 1352440, 1479892, 1547363, 1426485, 1386307, 1393497,
   1139550, 1191454, 1109367, 1069591, 1055318, 1031530, 1120368, 1203719, 1311219, 1273973, 1106321, 1099805,
   1097571, 1192008, 1087903, 1082933, 1058468, 953511, 931096, 1046534, 1197793, 1126059, 1044112, 1035930,
@@ -39,30 +27,8 @@ export const collectedData: number[] = [
 
 ];
 
-/**
- * ALTERNATIVE: If you have data in a different format, you can structure it like this:
- * 
- * Example 1: Data with labels (only values will be used)
- * export const collectedData: number[] = [
- *   10.5,  // Student 1
- *   12.3,  // Student 2
- *   11.8,  // Student 3
- *   // ... more data
- * ];
- * 
- * Example 2: If your data is in a CSV format, convert it to an array:
- * export const collectedData: number[] = [
- *   value1, value2, value3, value4, value5,
- *   value6, value7, value8, value9, value10,
- *   // ... continue with all your values
- * ];
- */
 
 // Optional: Add metadata about your data collection
 export const dataMetadata = {
-  collectorName: "Your Name Here",
-  dateCollected: "2024-XX-XX",
-  dataDescription: "Description of what data represents (e.g., student heights, test scores, etc.)",
-  units: "unit of measurement (e.g., cm, kg, seconds, etc.)",
   sampleSize: collectedData.length
 };

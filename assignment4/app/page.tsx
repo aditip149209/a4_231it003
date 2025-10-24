@@ -5,16 +5,11 @@ import React, { useState, useEffect } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
 import { collectedData } from './data/collectedData';
+import { cricketData } from './data/cricketData';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
 // Types
-interface DistributionResult {
-  probability: number;
-  mean: number;
-  variance: number;
-}
-
 interface ContinuousResult {
   pdf: number;
   cdf?: number;
@@ -31,36 +26,17 @@ interface ChartData {
     borderColor?: string;
     borderWidth?: number;
     tension?: number;
+    type?: string;
+    pointRadius?: number;
   }[];
 }
 
-// Factorial function
-const factorial = (n: number): number => {
-  if (n <= 1) return 1;
-  return n * factorial(n - 1);
-};
-
-// Combination function
-const combination = (n: number, r: number): number => {
-  return factorial(n) / (factorial(r) * factorial(n - r));
-};
-
-// Discrete Distribution Functions
-const binomialPMF = (n: number, p: number, k: number): number => {
-  return combination(n, k) * Math.pow(p, k) * Math.pow(1 - p, n - k);
-};
-
-const geometricPMF = (p: number, k: number): number => {
-  return Math.pow(1 - p, k - 1) * p;
-};
-
-const negativeBinomialPMF = (r: number, p: number, k: number): number => {
-  return combination(k - 1, r - 1) * Math.pow(p, r) * Math.pow(1 - p, k - r);
-};
-
-const poissonPMF = (lambda: number, k: number): number => {
-  return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
-};
+interface CricketInning {
+  matchId: string;
+  team: string;
+  sixesHit: number;
+  opponent: string;
+}
 
 // Continuous Distribution Functions
 const normalPDF = (x: number, mu: number, sigma: number): number => {
@@ -118,7 +94,6 @@ const gamma = (z: number): number => {
   const t = z + 7.5;
   return Math.sqrt(2 * Math.PI) * Math.pow(t, z + 0.5) * Math.exp(-t) * x;
 };
-
 
 const ContinuousDistributions: React.FC = () => {
   const [distType, setDistType] = useState<string>('normal');
@@ -396,15 +371,14 @@ const DataCollectionSection: React.FC = () => {
     const max = Math.max(...collectedData);
     const range = max - min;
     
-    // Use Sturges' rule for bin count, but cap between 5 and 30
     const sturgesBins = Math.ceil(Math.log2(collectedData.length) + 1);
     const binCount = Math.max(5, Math.min(30, sturgesBins));
     const binSize = range / binCount;
     
     const bins: number[] = new Array(binCount).fill(0);
     const labels: string[] = [];
+    const binCenters: number[] = [];
     
-    // Determine decimal places based on range
     let decimalPlaces = 0;
     if (range < 1) decimalPlaces = 3;
     else if (range < 10) decimalPlaces = 2;
@@ -415,8 +389,9 @@ const DataCollectionSection: React.FC = () => {
     for (let i = 0; i < binCount; i++) {
       const binStart = min + i * binSize;
       const binEnd = binStart + binSize;
+      const binCenter = (binStart + binEnd) / 2;
+      binCenters.push(binCenter);
       
-      // Format numbers appropriately for the scale
       if (range >= 1000) {
         labels.push(`${Math.round(binStart)}-${Math.round(binEnd)}`);
       } else {
@@ -426,21 +401,43 @@ const DataCollectionSection: React.FC = () => {
     
     collectedData.forEach(val => {
       let binIndex = Math.floor((val - min) / binSize);
-      // Handle edge case where value equals max
       if (binIndex >= binCount) binIndex = binCount - 1;
       if (binIndex < 0) binIndex = 0;
       bins[binIndex]++;
     });
 
+    const mean = distParams.mean;
+    const stdDev = distParams.stdDev;
+    const normalCurve: number[] = [];
+    const scaleFactor = collectedData.length * binSize;
+    
+    binCenters.forEach(x => {
+      const normalValue = normalPDF(x, mean, stdDev) * scaleFactor;
+      normalCurve.push(normalValue);
+    });
+
     return {
       labels,
-      datasets: [{
-        label: 'Frequency',
-        data: bins,
-        backgroundColor: 'rgba(147, 51, 234, 0.5)',
-        borderColor: 'rgb(147, 51, 234)',
-        borderWidth: 1,
-      }],
+      datasets: [
+        {
+          label: 'Frequency (Histogram)',
+          data: bins,
+          backgroundColor: 'rgba(147, 51, 234, 0.5)',
+          borderColor: 'rgb(147, 51, 234)',
+          borderWidth: 1,
+          type: 'bar',
+        },
+        {
+          label: 'Normal Distribution Curve',
+          data: normalCurve,
+          borderColor: 'rgb(239, 68, 68)',
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          borderWidth: 3,
+          type: 'line',
+          tension: 0.4,
+          pointRadius: 0,
+        }
+      ] as any,
     };
   };
 
@@ -464,7 +461,7 @@ const DataCollectionSection: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="bg-blue-50 p-4 rounded-lg">
           <h4 className="font-semibold text-blue-900">Mean (μ)</h4>
           <p className="text-2xl font-bold text-blue-600">{distParams.mean.toFixed(4)}</p>
@@ -496,8 +493,417 @@ const DataCollectionSection: React.FC = () => {
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">Data Histogram</h3>
-        <Bar data={generateHistogram()} options={{ responsive: true, plugins: { legend: { position: 'top' } } }} />
+        <h3 className="text-lg font-semibold mb-4">Data Histogram with Normal Distribution Overlay</h3>
+        <Bar 
+          data={generateHistogram()} 
+          options={{ 
+            responsive: true, 
+            plugins: { 
+              legend: { position: 'top' },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const label = context.dataset.label || '';
+                    const value = context.parsed.y;
+                    
+                    if (value === null || value === undefined) {
+                      return `${label}: No data`;
+                    }
+                    
+                    if (label.includes('Histogram')) {
+                      return `${label}: ${value} observations`;
+                    } else {
+                      return `${label}: ${value.toFixed(2)}`;
+                    }
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Frequency'
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Value Range'
+                }
+              }
+            }
+          }} 
+        />
+        <p className="text-sm text-gray-600 mt-3 text-center">
+          Purple bars show actual data distribution. Red curve shows fitted normal distribution.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const CricketAnalysis: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'overall' | 'byTeam' | 'comparison'>('overall');
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
+  const [comparisonTeams, setComparisonTeams] = useState<string[]>([]);
+
+  const teams = Array.from(new Set(cricketData.map(d => d.team))).sort();
+
+  const getTeamData = (team: string): number[] => {
+    return cricketData.filter(d => d.team === team).map(d => d.sixesHit);
+  };
+
+  const getAllData = (): number[] => {
+    return cricketData.map(d => d.sixesHit);
+  };
+
+  const calculateStats = (data: number[]) => {
+    if (data.length === 0) return { mean: 0, stdDev: 0, median: 0, min: 0, max: 0 };
+    
+    const mean = data.reduce((a, b) => a + b, 0) / data.length;
+    const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / data.length;
+    const sorted = [...data].sort((a, b) => a - b);
+    const median = sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+    
+    return {
+      mean,
+      stdDev: Math.sqrt(variance),
+      median,
+      min: Math.min(...data),
+      max: Math.max(...data)
+    };
+  };
+
+  const generateHistogram = (data: number[], color: string, label: string): any => {
+    if (data.length === 0) return null;
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min;
+    
+    const binCount = Math.max(5, Math.min(20, Math.ceil(Math.sqrt(data.length))));
+    const binSize = range / binCount;
+    
+    const bins: number[] = new Array(binCount).fill(0);
+    const labels: string[] = [];
+    
+    for (let i = 0; i < binCount; i++) {
+      const binStart = Math.floor(min + i * binSize);
+      const binEnd = Math.floor(binStart + binSize);
+      labels.push(`${binStart}-${binEnd}`);
+    }
+    
+    data.forEach(val => {
+      let binIndex = Math.floor((val - min) / binSize);
+      if (binIndex >= binCount) binIndex = binCount - 1;
+      if (binIndex < 0) binIndex = 0;
+      bins[binIndex]++;
+    });
+
+    return {
+      labels,
+      datasets: [{
+        label: label,
+        data: bins,
+        backgroundColor: color,
+        borderColor: color.replace('0.6', '1'),
+        borderWidth: 1,
+      }]
+    };
+  };
+
+  const generateComparisonChart = (): any => {
+    const selectedData = comparisonTeams.length > 0 ? comparisonTeams : teams.slice(0, 3);
+    
+    const allBins: { [key: string]: number[] } = {};
+    const commonLabels: string[] = [];
+    
+    const globalMin = Math.min(...getAllData());
+    const globalMax = Math.max(...getAllData());
+    const binCount = 15;
+    const binSize = (globalMax - globalMin) / binCount;
+    
+    for (let i = 0; i < binCount; i++) {
+      const binStart = Math.floor(globalMin + i * binSize);
+      const binEnd = Math.floor(binStart + binSize);
+      commonLabels.push(`${binStart}-${binEnd}`);
+    }
+    
+    const colors = [
+      'rgba(59, 130, 246, 0.6)',
+      'rgba(239, 68, 68, 0.6)',
+      'rgba(34, 197, 94, 0.6)',
+      'rgba(168, 85, 247, 0.6)',
+      'rgba(251, 146, 60, 0.6)',
+    ];
+    
+    const datasets = selectedData.map((team, idx) => {
+      const teamData = getTeamData(team);
+      const bins: number[] = new Array(binCount).fill(0);
+      
+      teamData.forEach(val => {
+        let binIndex = Math.floor((val - globalMin) / binSize);
+        if (binIndex >= binCount) binIndex = binCount - 1;
+        if (binIndex < 0) binIndex = 0;
+        bins[binIndex]++;
+      });
+      
+      return {
+        label: team,
+        data: bins,
+        backgroundColor: colors[idx % colors.length],
+        borderColor: colors[idx % colors.length].replace('0.6', '1'),
+        borderWidth: 1,
+      };
+    });
+    
+    return {
+      labels: commonLabels,
+      datasets
+    };
+  };
+
+  const handleTeamToggle = (team: string) => {
+    if (comparisonTeams.includes(team)) {
+      setComparisonTeams(comparisonTeams.filter(t => t !== team));
+    } else {
+      if (comparisonTeams.length < 5) {
+        setComparisonTeams([...comparisonTeams, team]);
+      }
+    }
+  };
+
+  const currentData = viewMode === 'overall' 
+    ? getAllData() 
+    : viewMode === 'byTeam' && selectedTeam !== 'all'
+    ? getTeamData(selectedTeam)
+    : getAllData();
+
+  const stats = calculateStats(currentData);
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Cricket T20I Sixes Analysis</h2>
+      
+      <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+        <p className="text-sm text-blue-800">
+          <strong>Data Structure:</strong> Each data point represents one team innings (not full match).
+          Data imported from: <code className="bg-blue-100 px-2 py-1 rounded">app/data/cricketData.ts</code>
+        </p>
+        <p className="text-sm text-blue-800 mt-2">
+          <strong>Format:</strong> Match ID | Team | Sixes Hit | Opponent
+        </p>
+      </div>
+
+      <div className="bg-gray-50 p-4 rounded-lg">
+        <h3 className="text-lg font-semibold mb-3">Analysis Mode</h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setViewMode('overall')}
+            className={`px-4 py-2 rounded transition ${
+              viewMode === 'overall'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white text-gray-700 border hover:bg-gray-50'
+            }`}
+          >
+            Overall Distribution
+          </button>
+          <button
+            onClick={() => setViewMode('byTeam')}
+            className={`px-4 py-2 rounded transition ${
+              viewMode === 'byTeam'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white text-gray-700 border hover:bg-gray-50'
+            }`}
+          >
+            Single Team Analysis
+          </button>
+          <button
+            onClick={() => setViewMode('comparison')}
+            className={`px-4 py-2 rounded transition ${
+              viewMode === 'comparison'
+                ? 'bg-blue-500 text-white'
+                : 'bg-white text-gray-700 border hover:bg-gray-50'
+            }`}
+          >
+            Compare Multiple Teams
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'byTeam' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Select Team</label>
+          <select 
+            value={selectedTeam} 
+            onChange={(e) => setSelectedTeam(e.target.value)}
+            className="w-full md:w-1/2 p-2 border rounded"
+          >
+            <option value="all">All Teams (Overall)</option>
+            {teams.map(team => (
+              <option key={team} value={team}>{team}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {viewMode === 'comparison' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Teams to Compare (Max 5)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {teams.map(team => (
+              <button
+                key={team}
+                onClick={() => handleTeamToggle(team)}
+                className={`px-3 py-1 rounded text-sm transition ${
+                  comparisonTeams.includes(team)
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white text-gray-700 border hover:bg-gray-50'
+                }`}
+                disabled={!comparisonTeams.includes(team) && comparisonTeams.length >= 5}
+              >
+                {team}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            {comparisonTeams.length > 0 
+              ? `Selected: ${comparisonTeams.join(', ')}`
+              : 'No teams selected. Default: First 3 teams will be shown.'}
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h4 className="font-semibold text-blue-900">Mean</h4>
+          <p className="text-2xl font-bold text-blue-600">{stats.mean.toFixed(2)}</p>
+          <p className="text-xs text-blue-700">sixes per innings</p>
+        </div>
+        <div className="bg-green-50 p-4 rounded-lg">
+          <h4 className="font-semibold text-green-900">Std Dev</h4>
+          <p className="text-2xl font-bold text-green-600">{stats.stdDev.toFixed(2)}</p>
+        </div>
+        <div className="bg-orange-50 p-4 rounded-lg">
+          <h4 className="font-semibold text-orange-900">Median</h4>
+          <p className="text-2xl font-bold text-orange-600">{stats.median.toFixed(2)}</p>
+        </div>
+        <div className="bg-purple-50 p-4 rounded-lg">
+          <h4 className="font-semibold text-purple-900">Min</h4>
+          <p className="text-2xl font-bold text-purple-600">{stats.min}</p>
+        </div>
+        <div className="bg-pink-50 p-4 rounded-lg">
+          <h4 className="font-semibold text-pink-900">Max</h4>
+          <p className="text-2xl font-bold text-pink-600">{stats.max}</p>
+        </div>
+        <div className="bg-indigo-50 p-4 rounded-lg">
+          <h4 className="font-semibold text-indigo-900">Sample Size</h4>
+          <p className="text-2xl font-bold text-indigo-600">{currentData.length}</p>
+          <p className="text-xs text-indigo-700">innings</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-4">
+          {viewMode === 'overall' && 'Overall Sixes Distribution (All Teams)'}
+          {viewMode === 'byTeam' && selectedTeam !== 'all' && `${selectedTeam} - Sixes per Innings`}
+          {viewMode === 'byTeam' && selectedTeam === 'all' && 'Overall Sixes Distribution (All Teams)'}
+          {viewMode === 'comparison' && 'Team Comparison'}
+        </h3>
+        
+        {viewMode === 'comparison' ? (
+          <Bar 
+            data={generateComparisonChart()}
+            options={{
+              responsive: true,
+              plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                  callbacks: {
+                    label: function(context) {
+                      const label = context.dataset.label || '';
+                      const value = context.parsed.y ?? 0;
+                      return `${label}: ${value} innings`;
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  title: {
+                    display: true,
+                    text: 'Number of Innings'
+                  }
+                },
+                x: {
+                  title: {
+                    display: true,
+                    text: 'Sixes per Innings'
+                  }
+                }
+              }
+            }}
+          />
+        ) : (
+          <Bar 
+            data={generateHistogram(
+              currentData,
+              'rgba(59, 130, 246, 0.6)',
+              `Frequency (${selectedTeam !== 'all' ? selectedTeam : 'All Teams'})`
+            )}
+            options={{
+              responsive: true,
+              plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                  callbacks: {
+                    label: function(context) {
+                      const value = context.parsed.y ?? 0;
+                      return `Innings: ${value}`;
+                    }
+                  }
+                }
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  title: {
+                    display: true,
+                    text: 'Number of Innings'
+                  }
+                },
+                x: {
+                  title: {
+                    display: true,
+                    text: 'Sixes per Innings'
+                  }
+                }
+              }
+            }}
+          />
+        )}
+        
+        <p className="text-sm text-gray-600 mt-3 text-center">
+          {viewMode === 'overall' && 'Distribution shows sixes hit per team innings across all T20I matches'}
+          {viewMode === 'byTeam' && selectedTeam !== 'all' && `Distribution of sixes per innings for ${selectedTeam}`}
+          {viewMode === 'comparison' && 'Compare distributions across multiple teams'}
+        </p>
+      </div>
+
+      <div className="bg-gray-50 p-4 rounded-lg">
+        <h3 className="text-lg font-semibold mb-2">Data Summary</h3>
+        <div className="space-y-1 text-sm text-gray-700">
+          <p><strong>Total Innings:</strong> {cricketData.length}</p>
+          <p><strong>Teams:</strong> {teams.length}</p>
+          <p><strong>Total Sixes:</strong> {getAllData().reduce((a, b) => a + b, 0)}</p>
+        </div>
       </div>
     </div>
   );
@@ -513,11 +919,11 @@ export default function App() {
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
             Probability Distribution Calculator
           </h1>
-          <p className="text-center text-gray-600">Continuous Distributions</p>
+          <p className="text-center text-gray-600">Continuous Distributions & Data Analysis</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-xl p-6">
-          <div className="flex gap-2 mb-6 border-b">
+          <div className="flex gap-2 mb-6 border-b flex-wrap">
             <button
               onClick={() => setActiveTab('continuous')}
               className={`px-6 py-3 font-semibold transition ${
@@ -538,10 +944,21 @@ export default function App() {
             >
               Data Collection
             </button>
+            <button
+              onClick={() => setActiveTab('cricket')}
+              className={`px-6 py-3 font-semibold transition ${
+                activeTab === 'cricket'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Cricket Analysis
+            </button>
           </div>
 
           {activeTab === 'continuous' && <ContinuousDistributions />}
           {activeTab === 'data' && <DataCollectionSection />}
+          {activeTab === 'cricket' && <CricketAnalysis />}
         </div>
       </div>
     </div>
